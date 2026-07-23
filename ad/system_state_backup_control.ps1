@@ -57,7 +57,7 @@ try {
     $TranscriptStarted = $true
 }
 catch {
-    Write-Host "WARNING: Unable to start transcript - $($_.Exception.Message)"
+    Write-Host "WARN: Unable to start transcript - $($_.Exception.Message)"
 }
 
 try {

@@ -212,7 +212,7 @@ try {
         }
         else
         {
-            Write-Log "Housekeeping returned exit code $($Delete.ExitCode)" WARNING $LogFile
+            Write-Log "Housekeeping returned exit code $($Delete.ExitCode)" WARN $LogFile
         }
 
         # Always clean metadata

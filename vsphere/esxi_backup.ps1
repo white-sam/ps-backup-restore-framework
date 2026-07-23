@@ -35,9 +35,7 @@ $TranscriptFile = Join-Path $BackupPath "transcript.log"
 Start-Transcript -Path $TranscriptFile -Force
 
 try {
-
     Write-Log "Starting ESXi configuration backup" INFO $LogFile
-
 
     # Import credentials
     $Cred = Get-SecureCredential -CredentialFile $VC.CredFile
@@ -77,7 +75,6 @@ try {
         }
     }
 
-
     # Export host inventory
     Write-Log "Exporting host inventory" INFO $LogFile
 
@@ -102,13 +99,10 @@ try {
         -Keep $GLOBAL.RetentionDays
 }
 catch {
-
     Write-Log "SCRIPT FAILED - $($_.Exception.Message)" ERROR $LogFile
     $ExitCode = 1
-
 }
 finally {
-
     Write-Log "Disconnecting from vCenter" INFO $LogFile
 
     Disconnect-VIServer * `

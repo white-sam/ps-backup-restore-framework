@@ -27,8 +27,8 @@ $Script:Config = @{
         BackupTimeoutHours = 5
 
         DomainControllers = @(
-            #"sodev-infra-dc1",
-            #"sodev-infra-dc2",
+            "sodev-infra-dc1",
+            "sodev-infra-dc2",
             "sodev-infra-dc3"
         )
 
