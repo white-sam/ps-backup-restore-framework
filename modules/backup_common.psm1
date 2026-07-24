@@ -15,14 +15,14 @@ $Script:Config = @{
         RetentionDays = 7
         Computer      = $env:COMPUTERNAME
 
-    Email = @{
-        Enabled      = $true
-        SmtpServer   = "smtp3.hpe.com"
-        Port         = 25
-        From         = "sam.white@hpe.com"
-        To           = "sam.white@hpe.com"
-        Subject      = "Infrastructure Backup Summary"
-    }
+        Email = @{
+            Enabled      = $true
+            SmtpServer   = "smtp3.hpe.com"
+            Port         = 25
+            From         = "sam.white@hpe.com"
+            To           = "sam.white@hpe.com,pawluczak@hpe.com"
+            Subject      = "Infrastructure Backup Summary"
+        }
     }
 
     ActiveDirectory = @{
