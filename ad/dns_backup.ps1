@@ -50,134 +50,134 @@ foreach ($Server in $AD.DnsServers) {
             -ItemType Directory `
             -Force | Out-Null
 
-    # DNS Server Information
-    Write-Log "Collecting DNS server information" INFO $LogFile
+        # DNS Server Information
+        Write-Log "Collecting DNS server information" INFO $LogFile
 
-    Get-DnsServer `
-        -ComputerName $Server |
+        Get-DnsServer `
+            -ComputerName $Server |
 
-    Export-Csv `
-        (Join-Path $ServerPath "dns_server.csv") `
-        -NoTypeInformation
-
-    Get-DnsServerSetting `
-        -ComputerName $Server `
-        -All |
-
-    Export-Csv `
-        (Join-Path $ServerPath "dns_settings.csv") `
-        -NoTypeInformation
-
-
-    Get-DnsServerForwarder `
-        -ComputerName $Server |
-
-    Export-Csv `
-        (Join-Path $ServerPath "forwarders.csv") `
-        -NoTypeInformation
-
-    Get-DnsServerRootHint `
-        -ComputerName $Server |
-
-    Export-Csv `
-        (Join-Path $ServerPath "root_hints.csv") `
-        -NoTypeInformation
-
-
-    # Zones
-    $Zones =
-    Get-DnsServerZone `
-        -ComputerName $Server
-
-    $Zones |
-        Select-Object `
-        ZoneName,
-        ZoneType,
-        IsDsIntegrated,
-        ReplicationScope,
-        DynamicUpdate |
         Export-Csv `
-        (Join-Path $ServerPath "zone_inventory.csv") `
-        -NoTypeInformation
+            (Join-Path $ServerPath "dns_server.csv") `
+            -NoTypeInformation
+
+        Get-DnsServerSetting `
+            -ComputerName $Server `
+            -All |
+
+        Export-Csv `
+            (Join-Path $ServerPath "dns_settings.csv") `
+            -NoTypeInformation
 
 
-    foreach ($Zone in $Zones) {
-        Write-Log "Processing zone $($Zone.ZoneName)" INFO $LogFile
+        Get-DnsServerForwarder `
+            -ComputerName $Server |
 
-        try {
-            $SafeZone =
-            $Zone.ZoneName -replace '[\\/:*?"<>|]','_'
+        Export-Csv `
+            (Join-Path $ServerPath "forwarders.csv") `
+            -NoTypeInformation
+
+        Get-DnsServerRootHint `
+            -ComputerName $Server |
+
+        Export-Csv `
+            (Join-Path $ServerPath "root_hints.csv") `
+            -NoTypeInformation
 
 
-            # Records
+        # Zones
+        $Zones =
+        Get-DnsServerZone `
+            -ComputerName $Server
 
-            $Records = @(
-                Get-DnsServerResourceRecord `
-                    -ComputerName $Server `
-                    -ZoneName $Zone.ZoneName
-                )
+        $Zones |
+            Select-Object `
+            ZoneName,
+            ZoneType,
+            IsDsIntegrated,
+            ReplicationScope,
+            DynamicUpdate |
+            Export-Csv `
+            (Join-Path $ServerPath "zone_inventory.csv") `
+            -NoTypeInformation
 
-            if ($Records.Count -gt 0) {
-                $Records |
-                    Select-Object `
-                    HostName,
-                    RecordType,
-                    Timestamp,
-                    @{
-                        Name="RecordData"
-                        Expression={
-                            $_.RecordData.ToString()
-                        }
-                    } |
 
-                    Export-Csv `
-                    (Join-Path `
-                    $ServerPath `
-                    "$SafeZone-records.csv") `
-                    -NoTypeInformation
+        foreach ($Zone in $Zones) {
+            Write-Log "Processing zone $($Zone.ZoneName)" INFO $LogFile
 
-                Write-Log "Record export complete: $($Zone.ZoneName)" SUCCESS $LogFile
+            try {
+                $SafeZone =
+                $Zone.ZoneName -replace '[\\/:*?"<>|]','_'
+
+
+                # Records
+
+                $Records = @(
+                    Get-DnsServerResourceRecord `
+                        -ComputerName $Server `
+                        -ZoneName $Zone.ZoneName
+                    )
+
+                if ($Records.Count -gt 0) {
+                    $Records |
+                        Select-Object `
+                        HostName,
+                        RecordType,
+                        Timestamp,
+                        @{
+                            Name="RecordData"
+                            Expression={
+                                $_.RecordData.ToString()
+                            }
+                        } |
+
+                        Export-Csv `
+                        (Join-Path `
+                        $ServerPath `
+                        "$SafeZone-records.csv") `
+                        -NoTypeInformation
+
+                    Write-Log "Record export complete: $($Zone.ZoneName)" SUCCESS $LogFile
+                }
+                else {
+                    Write-Log "No records found: $($Zone.ZoneName)" WARN $LogFile
+                }
             }
-            else {
-                Write-Log "No records found: $($Zone.ZoneName)" WARN $LogFile
+            catch {
+                Write-Log "Zone failed $($Zone.ZoneName): $($_.Exception.Message)" ERROR $LogFile
+
+                $Result.Success=$false
+                $Result.ExitCode=1
+                $Result.Error +=
+                $_.Exception.Message
             }
         }
-        catch {
-            Write-Log "Zone failed $($Zone.ZoneName): $($_.Exception.Message)" ERROR $LogFile
 
-            $Result.Success=$false
-            $Result.ExitCode=1
-            $Result.Error +=
-            $_.Exception.Message
+        # Manifest
+        $Manifest = [PSCustomObject]@{
+            Server=$Server
+            BackupTime=
+            (Get-Date)
+            ZoneCount=
+            $Zones.Count
         }
+
+        $Manifest |
+            Export-Csv `
+            (Join-Path $ServerPath "manifest.csv") `
+            -NoTypeInformation
+
+        Write-Log "DNS server backup complete: $Server" SUCCESS $LogFile
     }
 
-    # Manifest
-    $Manifest = [PSCustomObject]@{
-        Server=$Server
-        BackupTime=
-        (Get-Date)
-        ZoneCount=
-        $Zones.Count
+    catch {
+        Write-Log "Server backup failed $Server : $($_.Exception.Message)" ERROR $LogFile
+
+        $Result.Success=$false
+        $Result.ExitCode=1
+        $Result.Error=$_.Exception.Message
     }
 
-    $Manifest |
-        Export-Csv `
-        (Join-Path $ServerPath "manifest.csv") `
-        -NoTypeInformation
-
-    Write-Log "DNS server backup complete: $Server" SUCCESS $LogFile
-}
-
-catch {
-    Write-Log "Server backup failed $Server : $($_.Exception.Message)" ERROR $LogFile
-
-    $Result.Success=$false
-    $Result.ExitCode=1
-    $Result.Error=$_.Exception.Message
-}
-
-$BackupResults += $Result
+    $BackupResults += $Result
 }
 
 
@@ -195,8 +195,6 @@ foreach ($Item in $BackupResults) {
         Write-Log "$($Item.Server.PadRight(35)) FAILED ExitCode=$($Item.ExitCode)" ERROR $LogFile
     }
 }
-
-
 
 # Global Summary File
 $BackupResults |

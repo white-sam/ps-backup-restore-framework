@@ -48,10 +48,7 @@ try {
     $Results = @()
 
     foreach ($DHCPServer in $AD.DhcpServers) {
-        Write-Log `
-            "Starting DHCP backup for $DHCPServer" `
-            INFO `
-            $LogFile
+        Write-Log "Starting DHCP backup for $DHCPServer" INFO $LogFile
 
         $ServerBackupPath = Join-Path `
             $BackupPath `
@@ -66,10 +63,7 @@ try {
 
         # Native DHCP Backup
         try {
-            Write-Log `
-                "Running local Backup-DhcpServer on $DHCPServer" `
-                INFO `
-                $LogFile
+            Write-Log "Running local Backup-DhcpServer on $DHCPServer" INFO $LogFile
 
             $LocalBackupPath = "C:\Windows\Temp\DHCPBackup"
 
@@ -96,10 +90,7 @@ try {
                 } `
                 -ArgumentList $LocalBackupPath
 
-            Write-Log `
-                "Local DHCP backup completed on $DHCPServer" `
-                SUCCESS `
-                $LogFile
+            Write-Log "Local DHCP backup completed on $DHCPServer" SUCCESS $LogFile
 
             # Copy native backup to repository
             $NativeBackupPath = Join-Path `
@@ -111,10 +102,7 @@ try {
                 -Force `
                 -Path $NativeBackupPath | Out-Null
 
-            Write-Log `
-                "Copying DHCP backup from $DHCPServer" `
-                INFO `
-                $LogFile
+            Write-Log "Copying DHCP backup from $DHCPServer" INFO $LogFile
 
             robocopy `
                 "\\$DHCPServer\C$\Windows\Temp\DHCPBackup" `
@@ -129,26 +117,17 @@ try {
             if ($LASTEXITCODE -gt 7) {
                 throw "Robocopy failed with exit code $LASTEXITCODE"
             }
-            Write-Log `
-                "Native DHCP backup copied successfully for $DHCPServer" `
-                SUCCESS `
-                $LogFile
+            Write-Log "Native DHCP backup copied successfully for $DHCPServer" SUCCESS $LogFile
         }
         catch {
-            Write-Log `
-                "Backup-DhcpServer FAILED for $DHCPServer - $($_.Exception.Message)" `
-                ERROR `
-                $LogFile
+            Write-Log "Backup-DhcpServer FAILED for $DHCPServer - $($_.Exception.Message)" ERROR $LogFile
 
             $Success = $false
         }
 
         # XML Export
         try {
-            Write-Log `
-                "Running Export-DhcpServer for $DHCPServer" `
-                INFO `
-                $LogFile
+            Write-Log "Running Export-DhcpServer for $DHCPServer" INFO $LogFile
 
             Export-DhcpServer `
                 -ComputerName $DHCPServer `
@@ -158,16 +137,10 @@ try {
                 -Leases `
                 -ErrorAction Stop
 
-            Write-Log `
-                "Export-DhcpServer completed successfully for $DHCPServer" `
-                SUCCESS `
-                $LogFile
+            Write-Log "Export-DhcpServer completed successfully for $DHCPServer" SUCCESS $LogFile
         }
         catch {
-            Write-Log `
-                "Export-DhcpServer FAILED for $DHCPServer - $($_.Exception.Message)" `
-                ERROR `
-                $LogFile
+            Write-Log "Export-DhcpServer FAILED for $DHCPServer - $($_.Exception.Message)" ERROR $LogFile
 
             $Success = $false
         }
@@ -183,10 +156,7 @@ try {
 
     # DHCP Failover Configuration
     try {
-        Write-Log `
-            "Backing up DHCP failover configuration" `
-            INFO `
-            $LogFile
+        Write-Log "Backing up DHCP failover configuration" INFO $LogFile
 
         $PrimaryDHCP = $AD.DhcpServers[0]
 
@@ -197,16 +167,10 @@ try {
                 $BackupPath `
                 "DHCP-Failover-Configuration.xml")
 
-        Write-Log `
-            "DHCP failover configuration backup completed" `
-            SUCCESS `
-            $LogFile
+        Write-Log "DHCP failover configuration backup completed" SUCCESS $LogFile
     }
     catch {
-        Write-Log `
-            "DHCP failover configuration backup FAILED - $($_.Exception.Message)" `
-            ERROR `
-            $LogFile
+        Write-Log "DHCP failover configuration backup FAILED - $($_.Exception.Message)" ERROR $LogFile
     }
 
     # Create Backup Summary
@@ -224,10 +188,7 @@ try {
         -LogFile $LogFile
 }
 catch {
-    Write-Log `
-        "SCRIPT FAILED - $($_.Exception.Message)" `
-        ERROR `
-        $LogFile
+    Write-Log "SCRIPT FAILED - $($_.Exception.Message)" ERROR $LogFile
 
     $ExitCode = 1
 }
@@ -236,16 +197,10 @@ finally {
     Stop-Transcript
 
     if ($ExitCode -eq 0) {
-        Write-Log `
-            "DHCP backup completed successfully" `
-            SUCCESS `
-            $LogFile
+        Write-Log "DHCP backup completed successfully" SUCCESS $LogFile
     }
     else {
-        Write-Log `
-            "DHCP backup completed with errors" `
-            ERROR `
-            $LogFile
+        Write-Log "DHCP backup completed with errors" ERROR $LogFile
     }
 }
 

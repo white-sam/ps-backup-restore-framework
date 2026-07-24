@@ -41,12 +41,9 @@ Start-Transcript `
     -Path $TranscriptFile `
     -Force
 
-
 try {
     Write-Log "Starting Group Policy backup" INFO $LogFile
-
     Write-Log "Domain: $($AD.Domain)" INFO $LogFile
-
     Write-Log "Backup Path: $BackupPath" INFO $LogFile
 
 
