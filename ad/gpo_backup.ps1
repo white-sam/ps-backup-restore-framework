@@ -113,11 +113,12 @@ try {
         -NameProperty Domain `
         -Title "Group Policy Backup Summary"
 
-
-    # Housekeeping
+    # Backup Housekeeping
     Invoke-Housekeeping `
         -Path $AD.GPOBackupRoot `
-        -Keep $GLOBAL.RetentionDays
+        -Keep $GLOBAL.RetentionDays `
+        -Filter "*" `
+        -LogFile $LogFile
 }
 catch {
     Write-Log "SCRIPT FAILED - $($_.Exception.Message)" ERROR $LogFile

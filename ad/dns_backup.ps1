@@ -199,17 +199,17 @@ foreach ($Item in $BackupResults) {
 
 
 # Global Summary File
-
 $BackupResults |
     Export-Csv `
     (Join-Path $BackupPath "backup_summary.csv") `
     -NoTypeInformation
 
-# Backup Retention / Housekeeping
+# Backup Housekeeping
 Invoke-Housekeeping `
     -Path $AD.DnsBackupRoot `
-    -Keep $GLOBAL.RetentionDays
-
+    -Keep $GLOBAL.RetentionDays `
+    -Filter "*" `
+    -LogFile $LogFile
 
 
 if ($BackupResults.Success -contains $false)

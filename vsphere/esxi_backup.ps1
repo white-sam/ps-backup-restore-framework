@@ -47,7 +47,7 @@ try {
         -Credential $Cred `
         -ErrorAction Stop | Out-Null
 
-    Write-Log "Connected successfully" INFO $LogFile
+    Write-Log "Connected successfully" SUCCESS $LogFile
 
 
     # Backup each ESXi host
@@ -65,7 +65,7 @@ try {
                 -DestinationPath $BackupPath `
                 -ErrorAction Stop | Out-Null
 
-            Write-Log "Backup successful for $HostName" INFO $LogFile
+            Write-Log "Backup successful for $HostName" SUCCESS $LogFile
 
         }
         catch {
@@ -92,11 +92,12 @@ try {
 
     Write-Log "Inventory export complete" INFO $LogFile
 
-
     # Backup Housekeeping
     Invoke-Housekeeping `
         -Path $VC.BackupRoot `
-        -Keep $GLOBAL.RetentionDays
+        -Keep $GLOBAL.RetentionDays `
+        -Filter "*" `
+        -LogFile $LogFile
 }
 catch {
     Write-Log "SCRIPT FAILED - $($_.Exception.Message)" ERROR $LogFile

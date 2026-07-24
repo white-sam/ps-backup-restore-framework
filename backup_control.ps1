@@ -68,7 +68,7 @@ foreach ($Job in $Scripts) {
 
     $ScriptPath = Join-Path $GLOBAL.ScriptRoot $Job.File
 
-    Write-Log "Running $($Job.Name)..." INFO $LogFile
+    Write-Log "Running $($Job.Name)..." INFO $LogFile -Destination Console
 
     $Start = Get-Date
 
@@ -90,10 +90,10 @@ foreach ($Job in $Scripts) {
     $Duration = (Get-Date) - $Start
 
     if ($ExitCode -eq 0) {
-        Write-Log ("{0,-35} SUCCESS   {1:hh\:mm\:ss}" -f $Job.Name,$Duration) INFO $LogFile
+        Write-Log ("{0,-40} SUCCESS   {1:hh\:mm\:ss}" -f $Job.Name,$Duration) INFO $LogFile
     }
     else {
-        Write-Log ("{0,-35} FAILED ({1})   {1:hh\:mm\:ss}" -f $Job.Name,$ExitCode,$Duration) ERROR $LogFile
+        Write-Log ("{0,-40} FAILED ({1})   {2:hh\:mm\:ss}" -f $Job.Name,$ExitCode,$Duration) ERROR $LogFile
         $Failures++
     }
 }
@@ -112,6 +112,27 @@ Write-Log "============================================================" INFO $L
 
 # Display summary
 Get-Content $LogFile
+
+# Master Log Housekeeping
+Invoke-Housekeeping `
+    -Path $GLOBAL.LogRoot `
+    -Keep $GLOBAL.RetentionDays `
+    -Filter "MasterBackup-*.log"
+
+# Send email summary
+$Summary = Get-Content $LogFile | Out-String
+
+if ($Failures -eq 0) {
+    $Subject = "SUCCESS - Infrastructure Backup Summary"
+}
+else {
+    $Subject = "FAILED - Infrastructure Backup Summary ($Failures failures)"
+}
+
+Send-BackupEmail `
+    -Body $Summary `
+    -Subject $Subject `
+    -EmailConfig $GLOBAL.Email
 
 # Exit code for Task Scheduler
 if ($Failures -eq 0) {

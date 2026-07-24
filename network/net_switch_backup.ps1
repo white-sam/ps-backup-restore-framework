@@ -100,7 +100,9 @@ try {
     # Backup Housekeeping
     Invoke-Housekeeping `
         -Path $NET.BackupRoot `
-        -Keep $GLOBAL.RetentionDays
+        -Keep $GLOBAL.RetentionDays `
+        -Filter "*" `
+        -LogFile $LogFile
 }
 catch {
 

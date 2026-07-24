@@ -100,7 +100,9 @@ try
     # Backup Housekeeping
     Invoke-Housekeeping `
         -Path $FC.FcBackupRoot `
-        -Keep $GLOBAL.RetentionDays
+        -Keep $GLOBAL.RetentionDays `
+        -Filter "*" `
+        -LogFile $LogFile
 
     if ($ExitCode -eq 0) {
         Write-Log "All switch backups completed successfully." SUCCESS $LogFile

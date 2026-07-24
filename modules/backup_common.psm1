@@ -12,8 +12,17 @@ $Script:Config = @{
         ScriptRoot    = "E:\Scripts\Backup-Restore"
         BackupRoot    = "E:\Backups"
         LogRoot       = "E:\Backups\Logs"
-        RetentionDays = 31
+        RetentionDays = 7
         Computer      = $env:COMPUTERNAME
+
+    Email = @{
+        Enabled      = $true
+        SmtpServer   = "smtp3.hpe.com"
+        Port         = 25
+        From         = "sam.white@hpe.com"
+        To           = "sam.white@hpe.com"
+        Subject      = "Infrastructure Backup Summary"
+    }
     }
 
     ActiveDirectory = @{
@@ -23,7 +32,7 @@ $Script:Config = @{
         DhcpBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dhcp"
         DnsBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dns"
         SysStateBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\System_State"
-        SysStateKeepVersions = 7
+        SysStateKeepVersions = 5
         BackupTimeoutHours = 5
 
         DomainControllers = @(
@@ -96,7 +105,6 @@ $Script:Config = @{
             "sodev-infra-dc3"
         )
     }
-
 }
 
 
@@ -111,25 +119,50 @@ function Get-BackupConfig {
 # ============================================================================
 # Write-Log
 # ============================================================================
-function Write-Log {
+function Write-Log
+{
     [CmdletBinding()]
-    param(
+    param
+    (
         [Parameter(Mandatory)]
         [string]$Message,
 
         [ValidateSet('INFO','WARN','ERROR','SUCCESS')]
         [string]$Level = 'INFO',
 
-        [string]$LogFile
+        [string]$LogFile,
+
+        [ValidateSet('Both','Log','Console')]
+        [string]$Destination = 'Both'
     )
 
     $Time = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $Line = "[$Time] [$Level] $Message"
 
-    Write-Host $Line
+    switch ($Destination)
+    {
+        'Both'
+        {
+            Write-Host $Line
 
-    if ($LogFile) {
-        Add-Content -Path $LogFile -Value $Line
+            if ($LogFile)
+            {
+                Add-Content -Path $LogFile -Value $Line
+            }
+        }
+
+        'Console'
+        {
+            Write-Host $Line
+        }
+
+        'Log'
+        {
+            if ($LogFile)
+            {
+                Add-Content -Path $LogFile -Value $Line
+            }
+        }
     }
 }
 
@@ -156,36 +189,82 @@ function New-BackupFolder {
 # ============================================================================
 # Invoke-Housekeeping
 # ============================================================================
-function Invoke-Housekeeping {
-    param(
+function Invoke-Housekeeping
+{
+    [CmdletBinding()]
+    param
+    (
         [Parameter(Mandatory)]
         [string]$Path,
 
-        [int]$Keep = 31,
+        [Parameter(Mandatory)]
+        [int]$Keep,
+
+        [string]$Filter = "*",
 
         [string]$LogFile
     )
 
-    if (!(Test-Path $Path)) {
-        Write-Log "Housekeeping path does not exist: $Path" WARN $LogFile
-        return
-    }
+    $Start = Get-Date
+    $Removed = 0
 
-    $Folders = Get-ChildItem $Path -Directory |
-        Sort-Object CreationTime -Descending |
-        Select-Object -Skip $Keep
-
-    foreach ($Folder in $Folders)
+    try
     {
-        Write-Log "Removing old backup folder: $($Folder.FullName)" INFO $LogFile
+        if ($LogFile)
+        {
+            Write-Log "Housekeeping started" INFO $LogFile
+            Write-Log "Path      : $Path" INFO $LogFile
+            Write-Log "Filter    : $Filter" INFO $LogFile
+            Write-Log "Retention : $Keep days" INFO $LogFile
+        }
 
-        Remove-Item `
-            -Path $Folder.FullName `
-            -Recurse `
-            -Force
+        if (-not (Test-Path $Path))
+        {
+            if ($LogFile)
+            {
+                Write-Log "Housekeeping skipped - path does not exist" WARN $LogFile
+            }
+            return
+        }
+
+        $Cutoff = (Get-Date).AddDays(-$Keep)
+
+        $Files = Get-ChildItem `
+            -Path $Path `
+            -Filter $Filter |
+        Where-Object {
+            $_.LastWriteTime -lt $Cutoff
+        }
+
+        foreach ($File in $Files)
+        {
+            if ($LogFile)
+            {
+                Write-Log ("Removing: {0} (Last Modified: {1})" -f $File.FullName, $File.LastWriteTime) INFO $LogFile
+            }
+            Remove-Item $File.FullName -Force -Recurse -ErrorAction Stop
+            $Removed++
+        }
+
+        $Duration = (Get-Date) - $Start
+
+        if ($LogFile)
+        {
+            Write-Log (
+                "Housekeeping SUCCESS - Removed {0} file(s) in {1:hh\:mm\:ss}" -f
+                $Removed,
+                $Duration
+            ) SUCCESS $LogFile
+        }
     }
-
-    Write-Log "Housekeeping complete." INFO $LogFile
+    catch
+    {
+        if ($LogFile)
+        {
+            Write-Log ("Housekeeping FAILED: {0}" -f $_.Exception.Message) ERROR $LogFile
+        }
+        throw
+    }
 }
 
 
@@ -521,6 +600,34 @@ function Set-BackupEnvironment
     $script:ErrorActionPreference = 'Stop'
 }
 
+function Send-BackupEmail {
+    param(
+        [Parameter(Mandatory)]
+        [string]$Body,
+
+        [Parameter(Mandatory)]
+        [string]$Subject,
+
+        [Parameter(Mandatory)]
+        $EmailConfig
+    )
+    if (!$EmailConfig.Enabled) {
+        return
+    }
+    try {
+        Send-MailMessage `
+            -SmtpServer $EmailConfig.SmtpServer `
+            -Port $EmailConfig.Port `
+            -From $EmailConfig.From `
+            -To $EmailConfig.To `
+            -Subject $Subject `
+            -Body $Body
+    }
+    catch {
+        Write-Warning "Failed to send backup email: $($_.Exception.Message)"
+    }
+}
+
 Export-ModuleMember -Function `
     Set-BackupEnvironment,
     Get-BackupConfig,
@@ -533,4 +640,5 @@ Export-ModuleMember -Function `
     Wait-BackupProcess,
     Write-BackupSummary,
     Get-SecureCredential,
-    Invoke-SystemStateMetadataHousekeeping
+    Invoke-SystemStateMetadataHousekeeping,
+    Send-BackupEmail
