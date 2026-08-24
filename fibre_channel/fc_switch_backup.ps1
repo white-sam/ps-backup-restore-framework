@@ -39,6 +39,7 @@ try
         Write-Log "[$Switch] Starting backup..." INFO $LogFile
 
         $RemoteFile = "$($FC.FcRemotePath)/$($GLOBAL.Timestamp)/$Switch-$($GLOBAL.Timestamp).txt"
+        $LocalFile = Join-Path $FC.FcBackupRoot "$($GLOBAL.Timestamp)\$Switch-$($GLOBAL.Timestamp).txt"
 
         $Command = "configupload -all -P 22 -scp $($FC.ScpHost),$($FC.ScpUser),$RemoteFile"
 
@@ -64,6 +65,16 @@ try
         if ($Success)
         {
             Write-Log "[$Switch] Backup completed successfully." SUCCESS $LogFile
+
+            if (Test-Path $LocalFile)
+            {
+                $Hash = (Get-FileHash -Path $LocalFile -Algorithm SHA256).Hash
+                Write-Log "[$Switch] SHA256: $Hash" INFO $LogFile
+            }
+            else
+            {
+                Write-Log "[$Switch] Backup file not found: $LocalFile" WARNING $LogFile
+            }
         }
         else
         {

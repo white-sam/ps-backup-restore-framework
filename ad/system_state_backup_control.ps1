@@ -188,26 +188,53 @@ try {
     foreach ($Job in $Jobs)
     {
         try {
-            $Result = $Job |
-                Wait-Job |
-                Receive-Job
+            Wait-Job -Job $Job | Out-Null
 
-            $Results += $Result
+            $childErrors = @(
+                $Job.ChildJobs |
+                ForEach-Object { $_.Error }
+            ) | Where-Object { $_ }
+
+            $Result = Receive-Job `
+                -Job $Job `
+                -ErrorAction SilentlyContinue
+
+            if ($childErrors.Count -gt 0)
+            {
+                $Results += [PSCustomObject]@{
+                    Server   = if ($Job.Location) { $Job.Location } else { "Unknown" }
+                    Success  = $false
+                    Message  = ($childErrors | ForEach-Object { $_.Exception.Message }) -join " | "
+                    ExitCode = 1
+                }
+                $ExitCode = 1
+            }
+            elseif (-not $Result)
+            {
+                $Results += [PSCustomObject]@{
+                    Server   = if ($Job.Location) { $Job.Location } else { "Unknown" }
+                    Success  = $false
+                    Message  = "Remote job returned no result"
+                    ExitCode = 1
+                }
+                $ExitCode = 1
+            }
+            else
+            {
+                $Results += $Result
+            }
         }
         catch {
             $Results += [PSCustomObject]@{
-                Server  = "Unknown"
-                Success = $false
-                Message = $_.Exception.Message
+                Server   = if ($Job.Location) { $Job.Location } else { "Unknown" }
+                Success  = $false
+                Message  = $_.Exception.Message
                 ExitCode = 1
             }
             $ExitCode = 1
         }
         finally {
-            Remove-Job `
-                $Job `
-                -Force `
-                -ErrorAction SilentlyContinue
+            Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
         }
     }
 

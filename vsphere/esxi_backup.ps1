@@ -54,10 +54,28 @@ try {
     Get-VMHost | ForEach-Object {
 
         $HostName = $_.Name
+        
+        # Get ESXCLI v2 interface
+        $EsxCli = Get-EsxCli -VMHost $HostName -V2
+        
+        # Capture encryption recovery info
+        $EncryptionInfo = $EsxCli.system.settings.encryption.recovery.list.Invoke()
 
         Write-Log "Backing up $HostName" INFO $LogFile
 
+        # Convert object to formatted string
+        if ($EncryptionInfo) {
+            $EncryptionString = $EncryptionInfo | Format-Table -AutoSize | Out-String
+            Write-Log "$HostName Encryption Key" INFO $LogFile
+            Write-Log "$EncryptionString" INFO $LogFile
+        }
+        else {
+            Write-Log "No encryption recovery information found" WARNING $LogFile
+        }
+
         try {
+            # Files before the backup
+            $ExistingFiles = Get-ChildItem -Path $BackupPath -File
 
             Get-VMHostFirmware `
                 -VMHost $_ `
@@ -65,7 +83,21 @@ try {
                 -DestinationPath $BackupPath `
                 -ErrorAction Stop | Out-Null
 
-            Write-Log "Backup successful for $HostName" SUCCESS $LogFile
+            # Find the new file
+            $BackupFile = Get-ChildItem -Path $BackupPath -File |
+                Where-Object { $_.FullName -notin $ExistingFiles.FullName } |
+                Sort-Object LastWriteTime -Descending |
+                Select-Object -First 1
+
+            if ($BackupFile) {
+                $Hash = (Get-FileHash -Path $BackupFile.FullName -Algorithm SHA256).Hash
+
+                Write-Log "Backup successful for $HostName" SUCCESS $LogFile
+                Write-Log "SHA256: $Hash ($($BackupFile.Name))" INFO $LogFile
+            }
+            else {
+                Write-Log "Backup successful for $HostName but backup file could not be located." WARNING $LogFile
+            }
 
         }
         catch {

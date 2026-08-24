@@ -12,7 +12,7 @@ $Script:Config = @{
         ScriptRoot    = "E:\Scripts\Backup-Restore"
         BackupRoot    = "E:\Backups"
         LogRoot       = "E:\Backups\Logs"
-        RetentionDays = 7
+        RetentionDays = 14
         Computer      = $env:COMPUTERNAME
 
         Email = @{
@@ -20,7 +20,11 @@ $Script:Config = @{
             SmtpServer   = "smtp3.hpe.com"
             Port         = 25
             From         = "sam.white@hpe.com"
-            To           = "sam.white@hpe.com,pawluczak@hpe.com"
+            To           = @(
+                "sam.white@hpe.com"
+                "pawluczak@hpe.com"
+                "semple-smith@hpe.com"
+            )
             Subject      = "Infrastructure Backup Summary"
         }
     }
@@ -32,7 +36,7 @@ $Script:Config = @{
         DhcpBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dhcp"
         DnsBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dns"
         SysStateBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\System_State"
-        SysStateKeepVersions = 5
+        SysStateKeepVersions = 7
         BackupTimeoutHours = 5
 
         DomainControllers = @(
@@ -97,11 +101,6 @@ $Script:Config = @{
         DomainControllers = @(
             "sodev-infra-dc1",
             "sodev-infra-dc2",
-            "sodev-infra-dc3"
-        )
-
-        DhcpServers = @(
-            "sodev-infra-dc1",
             "sodev-infra-dc3"
         )
     }
@@ -282,6 +281,8 @@ function Invoke-SystemStateMetadataHousekeeping
         [Parameter(Mandatory)]
         [string]$BackupTarget,
 
+        [string]$Machine = $env:COMPUTERNAME,
+
         [string]$LogFile
     )
 
@@ -289,15 +290,17 @@ function Invoke-SystemStateMetadataHousekeeping
 
     try
     {
-        $Output = & wbadmin get versions "-backuptarget:$BackupTarget" 2>&1
+        $Output = & wbadmin get versions `
+            "-backuptarget:$BackupTarget" `
+            "-machine:$Machine" 2>&1
 
         if ($LASTEXITCODE -ne 0)
         {
-            throw "wbadmin get versions failed."
+            throw "wbadmin get versions failed with exit code $LASTEXITCODE.`n$($Output -join "`n")"
         }
 
-        # Build a list of retained backup timestamps
-        $ValidFolders = New-Object System.Collections.Generic.HashSet[string]
+        # Build a list of retained backup timestamps (minute precision)
+        $ValidFolders = New-Object 'System.Collections.Generic.HashSet[string]'
 
         foreach ($Line in $Output)
         {
@@ -305,20 +308,25 @@ function Invoke-SystemStateMetadataHousekeeping
             {
                 try
                 {
-                    $Date = [datetime]::Parse($Matches[1])
-                    $FolderName = $Date.ToString("yyyyMMdd-HHmmss")
-                    $null = $ValidFolders.Add($FolderName)
+                    $Date = [datetime]::ParseExact(
+                        $Matches[1],
+                        'MM/dd/yyyy-HH:mm',
+                        [System.Globalization.CultureInfo]::InvariantCulture
+                    )
+
+                    $FolderMinute = $Date.ToString("yyyyMMdd-HHmm")
+                    $null = $ValidFolders.Add($FolderMinute)
                 }
                 catch
                 {
-                    Write-Log "Unable to parse version identifier '$($Matches[1])'" WARNING $LogFile
+                    Write-Log "Unable to parse version identifier '$($Matches[1])'" WARN $LogFile
                 }
             }
         }
 
         if ($ValidFolders.Count -eq 0)
         {
-            Write-Log "No versions returned by wbadmin. Metadata cleanup skipped." WARNING $LogFile
+            Write-Log "No versions returned by wbadmin. Metadata cleanup skipped." WARN $LogFile
             return
         }
 
@@ -329,26 +337,31 @@ function Invoke-SystemStateMetadataHousekeeping
             $_.Name -match '^\d{8}-\d{6}$'
         } |
         ForEach-Object {
+            $Folder = $_
+            $FolderName = $Folder.Name
+            $FolderPath = $Folder.FullName
+            $FolderMinute = $FolderName.Substring(0,13)
 
-            if (-not $ValidFolders.Contains($_.Name))
+            if (-not $ValidFolders.Contains($FolderMinute))
             {
                 try
                 {
-                    Write-Log "Removing orphaned metadata folder $($_.Name)" INFO $LogFile
+                    Write-Log "Removing orphaned metadata folder $FolderName" INFO $LogFile
 
                     Remove-Item `
-                        -Path $_.FullName `
+                        -Path $FolderPath `
                         -Recurse `
                         -Force
 
-                    Write-Log "Removed $($_.Name)" SUCCESS $LogFile
+                    Write-Log "Removed $FolderName" SUCCESS $LogFile
                 }
                 catch
                 {
-                    Write-Log "Failed removing $($_.Name): $($_.Exception.Message)" ERROR $LogFile
+                    Write-Log "Failed removing ${FolderName}: $($_.Exception.Message)" ERROR $LogFile
                 }
             }
         }
+
         Write-Log "Metadata synchronisation completed" SUCCESS $LogFile
     }
     catch
@@ -615,6 +628,8 @@ function Send-BackupEmail {
         return
     }
     try {
+        Write-Log "Sending backup summary email" INFO $LogFile
+
         Send-MailMessage `
             -SmtpServer $EmailConfig.SmtpServer `
             -Port $EmailConfig.Port `
@@ -624,7 +639,7 @@ function Send-BackupEmail {
             -Body $Body
     }
     catch {
-        Write-Warning "Failed to send backup email: $($_.Exception.Message)"
+        Write-Log "Failed to send backup email: $($_.Exception.Message)" WARN $LogFile
     }
 }
 

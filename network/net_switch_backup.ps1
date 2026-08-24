@@ -36,6 +36,8 @@ try {
 
     $Results = foreach ($Switch in $NET.Switches)
     {
+        $BackupFile = Join-Path $BackupPath "$Switch.cfg"
+
         Write-Log "Connecting to $Switch" INFO $LogFile
 
         try
@@ -77,6 +79,18 @@ try {
         if ($Success)
         {
             Write-Log "[$Switch] Backup completed successfully." SUCCESS $LogFile
+
+            if (Test-Path $BackupFile)
+            {
+                $Hash = (Get-FileHash -Path $BackupFile -Algorithm SHA256).Hash
+
+                Write-Log "[$Switch] File: $($BackupFile)" INFO $LogFile
+                Write-Log "[$Switch] SHA256: $Hash" INFO $LogFile
+            }
+            else
+            {
+                Write-Log "[$Switch] Backup file not found: $BackupFile" WARNING $LogFile
+            }
         }
         else
         {

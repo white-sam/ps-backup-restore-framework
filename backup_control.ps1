@@ -90,10 +90,10 @@ foreach ($Job in $Scripts) {
     $Duration = (Get-Date) - $Start
 
     if ($ExitCode -eq 0) {
-        Write-Log ("{0,-40} SUCCESS   {1:hh\:mm\:ss}" -f $Job.Name,$Duration) INFO $LogFile
+        Write-Log ("{0,-45} SUCCESS   {1:hh\:mm\:ss}" -f $Job.Name,$Duration) INFO $LogFile
     }
     else {
-        Write-Log ("{0,-40} FAILED ({1})   {2:hh\:mm\:ss}" -f $Job.Name,$ExitCode,$Duration) ERROR $LogFile
+        Write-Log ("{0,-45} FAILED ({1})   {2:hh\:mm\:ss}" -f $Job.Name,$ExitCode,$Duration) ERROR $LogFile
         $Failures++
     }
 }

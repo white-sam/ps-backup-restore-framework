@@ -121,7 +121,7 @@ try {
     $Arguments = @(
         "start"
         "systemstatebackup"
-        "-backuptarget:$BackupPath"
+        "-backuptarget:$BackupPathTimestamp"
         "-quiet"
     )
 
@@ -200,6 +200,7 @@ try {
                 "delete"
                 "backup"
                 "-backupTarget:$BackupPath"
+                "-machine:$($GLOBAL.Computer)"
                 "-keepVersions:$($AD.SysStateKeepVersions)"
                 "-quiet"
             ) `
@@ -216,10 +217,10 @@ try {
         }
 
         # Always clean metadata
-        Invoke-SystemStateMetadataHousekeeping `
-            -MetadataRoot $AD.SysStateBackupRoot `
-            -BackupTarget $BackupPath `
-            -LogFile $LogFile
+        #Invoke-SystemStateMetadataHousekeeping `
+        #    -MetadataRoot $AD.SysStateBackupRoot `
+        #    -BackupTarget $BackupPath `
+        #    -LogFile $LogFile
     }
 
 }
