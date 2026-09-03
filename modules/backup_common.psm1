@@ -36,7 +36,7 @@ $Script:Config = @{
         DhcpBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dhcp"
         DnsBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\Dns"
         SysStateBackupRoot = "\\SODEV-CORE01\Backups\Active_Directory\System_State"
-        SysStateKeepVersions = 7
+        SysStateKeepVersions = 10
         BackupTimeoutHours = 5
 
         DomainControllers = @(

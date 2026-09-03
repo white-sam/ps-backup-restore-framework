@@ -9,6 +9,7 @@ Import-Module ActiveDirectory -ErrorAction Stop
 # Configuration
 $config = Get-BackupConfig
 $ExitCode = 0
+$HousekeepingExitCode = 0
 $AD     = $config.ActiveDirectory
 $GLOBAL = $config.Global
 
@@ -141,7 +142,7 @@ try {
     if (Test-Path $StatusFile)
     {
         Remove-Item `
-            $StatusFile `
+            -Path $StatusFile `
             -Force
     }
 
@@ -161,10 +162,9 @@ try {
     }
 
     # Stop status monitor
-    Stop-Process `
-        -Id $StatusProcess.Id `
-        -Force `
-        -ErrorAction SilentlyContinue
+    if ($StatusProcess -and -not $StatusProcess.HasExited) {
+        Stop-Process -Id $StatusProcess.Id -Force -ErrorAction SilentlyContinue
+    }
 
     Write-Log "wbadmin completed with exit code $($Process.ExitCode)" INFO $LogFile
 
@@ -192,35 +192,61 @@ try {
     # Backup Housekeeping
     if ($Process.ExitCode -eq 0)
     {
-        Write-Log "Running System State housekeeping" INFO $LogFile
+        $HousekeepingExitCode = 0
 
-        $Delete = Start-Process `
-            -FilePath "wbadmin.exe" `
-            -ArgumentList @(
-                "delete"
-                "backup"
-                "-backupTarget:$BackupPath"
-                "-machine:$($GLOBAL.Computer)"
-                "-keepVersions:$($AD.SysStateKeepVersions)"
-                "-quiet"
-            ) `
-            -Wait `
-            -PassThru
+        Write-Log "Running System State housekeeping" INFO $LogFile      
 
-        if ($Delete.ExitCode -eq 0)
-        {
-            Write-Log "Housekeeping completed successfully" SUCCESS $LogFile
+        # Keep the newest N timestamp backup folders
+        $KeepVersions = [int]$AD.SysStateKeepVersions
+        $BackupRoot = $AD.SysStateBackupRoot
+
+        $BackupFolders = Get-ChildItem `
+            -Path $BackupRoot `
+            -Directory |
+            Where-Object {
+                $_.Name -match '^\d{8}-\d{6}$'  # Regex: Begins 8 digits - 6 digits (20260817-235222)
+            } |
+            Sort-Object Name -Descending
+
+        $FoldersToDelete = @($BackupFolders | Select-Object -Skip $KeepVersions)
+
+        if ($FoldersToDelete.Count -gt 0) {
+            foreach ($Folder in $FoldersToDelete)
+            {
+                Write-Log "Deleting old System State backup: $($Folder.FullName)" INFO $LogFile
+
+                try
+                {
+                    Remove-Item `
+                        -Path $Folder.FullName `
+                        -Recurse `
+                        -Force `
+                        -ErrorAction Stop
+
+                    Write-Log "Deleted: $($Folder.FullName)" SUCCESS $LogFile
+                }
+                catch
+                {
+                    Write-Log "Failed to delete $($Folder.FullName): $($_.Exception.Message)" ERROR $LogFile
+                    $HousekeepingExitCode = 1
+                }
+            }
+
+            # Always clean metadata
+            #Invoke-SystemStateMetadataHousekeeping `
+            #    -MetadataRoot $AD.SysStateBackupRoot `
+            #    -BackupTarget $BackupPath `
+            #    -LogFile $LogFile
+        } else {
+            Write-Log "Housekeeping not required" INFO $LogFile                
         }
-        else
-        {
-            Write-Log "Housekeeping returned exit code $($Delete.ExitCode)" WARN $LogFile
-        }
 
-        # Always clean metadata
-        #Invoke-SystemStateMetadataHousekeeping `
-        #    -MetadataRoot $AD.SysStateBackupRoot `
-        #    -BackupTarget $BackupPath `
-        #    -LogFile $LogFile
+        if ($HousekeepingExitCode -eq 0) {
+            Write-Log "System State housekeeping completed" INFO $LogFile
+        } else {
+            Write-Log "System State housekeeping failed" WARN $LogFile
+            $ExitCode = 1
+        }
     }
 
 }
@@ -229,9 +255,13 @@ catch {
     $ExitCode = 1
 }
 finally {
-    Stop-Process `
-        -Name wbadmin `
-        -ErrorAction SilentlyContinue
+    if ($Process -and -not $Process.HasExited) {
+        Stop-Process -Id $Process.Id -Force -ErrorAction SilentlyContinue
+    }
+
+    if ($StatusProcess -and -not $StatusProcess.HasExited) {
+        Stop-Process -Id $StatusProcess.Id -Force -ErrorAction SilentlyContinue
+    }
 
     Stop-Transcript
 
