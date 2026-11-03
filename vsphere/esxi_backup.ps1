@@ -65,7 +65,8 @@ try {
 
         # Convert object to formatted string
         if ($EncryptionInfo) {
-            $EncryptionString = $EncryptionInfo | Format-Table -AutoSize | Out-String
+            $EncryptionString = ($EncryptionInfo | Select-Object -ExpandProperty Key) -join [Environment]::NewLine
+
             Write-Log "$HostName Encryption Key" INFO $LogFile
             Write-Log "$EncryptionString" INFO $LogFile
         }
